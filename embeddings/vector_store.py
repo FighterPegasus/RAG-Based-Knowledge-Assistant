@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
@@ -41,7 +40,6 @@ def load_index():
 
 
 def query_index(index, question: str, k: int = 4):
-    """Return top-k similar chunks for a question."""
     return index.similarity_search(question, k=k)
 
 

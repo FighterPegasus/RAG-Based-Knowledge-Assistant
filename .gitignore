@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.hypothesis/
+.pytest_cache/
+
+# Env
+.venv/
+venv/
+*.env
+
+# macOS
+.DS_Store
+
+# MLflow
+mlruns/
+answer.txt
+
+# Streamlit
+.streamlit/

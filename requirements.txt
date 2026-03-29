@@ -1,0 +1,27 @@
+# Web framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+
+# LangChain core + integrations
+langchain==0.3.23
+langchain-community==0.3.21
+langchain-ollama==0.3.2
+
+# Vector store
+faiss-cpu==1.10.0
+
+# PDF loading
+pypdf==5.4.0
+
+# Data
+pandas==2.2.3
+
+# MLflow experiment tracking
+mlflow==2.21.3
+
+# Testing
+pytest==8.3.5
+httpx==0.28.1
+
+# Streamlit chat UI
+streamlit==1.55.0
