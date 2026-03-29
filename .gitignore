@@ -19,3 +19,6 @@ answer.txt
 
 # Streamlit
 .streamlit/
+# Data and index (too large for git)
+data/*.pdf
+faiss_index/
