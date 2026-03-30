@@ -1,72 +1,110 @@
 # RAG Knowledge Assistant
 
-Answers natural language questions over three financial 10-K filings:
-- Capital One (`capital_one_10k.pdf`)
-- Discover Financial (`discover_10k.pdf`)
-- Synchrony Financial (`synchrony_10k.pdf`)
-
-Retrieval is done with FAISS. Generation uses LLaMA 3 via Ollama. The API is served with FastAPI.
+Ask natural language questions across Capital One, Discover Financial, and Synchrony Financial 10-K filings.
 
 ---
 
-## Project Structure
+## Demo
+
+![UI](docs/screenshot.png)
+
+---
+
+## What it does
+
+Ingests three annual 10-K filings as PDF documents, splits them into chunks, and stores them in a FAISS vector index. When a user asks a question, the system retrieves the most relevant chunks and passes them to a locally running LLaMA 3 model to generate an answer. Source documents and page numbers are returned alongside every response.
+
+---
+
+## Tech Stack
+
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
+![LangChain](https://img.shields.io/badge/LangChain-0.3.23-green)
+![FAISS](https://img.shields.io/badge/FAISS-1.10.0-orange)
+![Ollama](https://img.shields.io/badge/Ollama-local-black)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-teal?logo=fastapi)
+![MLflow](https://img.shields.io/badge/MLflow-2.21-blue?logo=mlflow)
+![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.55-red?logo=streamlit)
+
+---
+
+## Architecture
 
 ```
-.
-├── api/
-│   └── main.py                 # FastAPI app (POST /ask, GET /health)
-├── chains/
-│   └── qa_chain.py             # RetrievalQA chain (LLaMA 3 + FAISS retriever)
-├── data/
-│   ├── capital_one_10k.pdf
-│   ├── discover_10k.pdf
-│   ├── synchrony_10k.pdf
-│   └── financial_summary.csv
-├── embeddings/
-│   └── vector_store.py         # FAISS index build/load/query
-├── evaluation/
-│   └── retrieval_eval.py       # Hit rate, source accuracy, MRR
-├── exploration/
-│   └── explore_data.py         # Data inspection script
-├── faiss_index/                # Pre-built index (do not delete)
-├── ingestion/
-│   ├── pdf_loader.py           # PDF → chunks
-│   └── csv_loader.py           # CSV → Documents
-├── monitoring/
-│   └── mlflow_logger.py        # MLflow query logging
-├── tests/
-│   └── test_pipeline.py        # Unit tests (14 tests, no Ollama required)
-├── Dockerfile
-├── requirements.txt
-└── README.md
+PDF Documents
+    → Text Chunks (RecursiveCharacterTextSplitter, 1000 chars / 200 overlap)
+    → Vector Embeddings (nomic-embed-text via Ollama)
+    → FAISS Index (persisted to disk)
+    → Retriever (top-4 chunks by similarity)
+    → LLaMA 3 (via Ollama, runs locally)
+    → Answer + Source Citations
 ```
+
+---
+
+## Evaluation Results
+
+Metrics from `python -m evaluation.retrieval_eval` against the live index:
+
+| Metric | Value |
+|--------|-------|
+| Chunks indexed | 3,650 across 3 filings |
+| Hit rate | 1.0 |
+| Source accuracy | 0.625 |
+| MRR | 0.396 |
+| Unit tests | 16 / 16 passing |
+
+Hit rate measures whether any retrieved chunk contains an expected keyword. Source accuracy measures whether the correct company's filing appears in the top-4 results.
+
+---
+
+## Example Questions and Answers
+
+**Q: What was Capital One's net income in 2024?**
+> Capital One reported net income of $4.8 billion ($11.59 per diluted common share) for 2024.
+> Sources: capital_one_10k.pdf (pages 56, 72)
+
+**Q: What was Capital One's total net revenue in 2024?**
+> Capital One reported total net revenue of $39.1 billion for 2024.
+> Sources: capital_one_10k.pdf (pages 56, 70, 72)
+
+**Q: What is Discover Financial's provision for credit losses?**
+> Discover Financial's provision for credit losses was $11.7 billion in 2024, $10.4 billion in 2023, and $5.8 billion in 2022.
+> Sources: discover_10k.pdf
 
 ---
 
 ## Prerequisites
 
 - Python 3.9+
-- [Ollama](https://ollama.com) running locally with two models pulled:
-  ```
-  ollama pull llama3
-  ollama pull nomic-embed-text
-  ```
+- [Ollama](https://ollama.com) running locally with both models pulled:
+
+```bash
+ollama pull llama3
+ollama pull nomic-embed-text
+```
 
 ---
 
 ## Setup
 
 ```bash
-git clone <repo-url>
-cd "RAG Knowledge Assistant"
+git clone https://github.com/FighterPegasus/RAG-Based-Knowledge-Assistant.git
+cd RAG-Based-Knowledge-Assistant
 
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
 
-The FAISS index is pre-built in `faiss_index/`. If you need to rebuild it (e.g. after changing the data files):
+Place your PDF files in `data/`:
+- `data/capital_one_10k.pdf`
+- `data/discover_10k.pdf`
+- `data/synchrony_10k.pdf`
+
+Build the FAISS index (only needed once, or after changing the PDFs):
 
 ```bash
 python -m embeddings.vector_store
@@ -74,56 +112,27 @@ python -m embeddings.vector_store
 
 ---
 
-## Running the API
+## Running
 
+**Streamlit UI:**
 ```bash
-uvicorn api.main:app --reload --port 8000
+streamlit run app.py
+```
+Opens at http://localhost:8501
+
+**FastAPI:**
+```bash
+uvicorn api.main:app --port 8000
 ```
 
-### Endpoints
+Endpoints:
+- `GET /health` — chain status
+- `POST /ask` — body: `{"question": "..."}`, returns answer + sources + latency
 
-#### `GET /health`
-```json
-{ "status": "ok", "chain_loaded": true }
-```
-
-#### `POST /ask`
-
-Request:
-```json
-{ "question": "What was Capital One's net income in 2024?" }
-```
-
-Response:
-```json
-{
-  "question": "What was Capital One's net income in 2024?",
-  "answer": "...",
-  "sources": [
-    {
-      "source": "capital_one_10k.pdf",
-      "page": <page_number>,
-      "snippet": "..."
-    }
-  ],
-  "latency_seconds": <measured>
-}
-```
-
----
-
-## Running with Docker
-
+**Docker:**
 ```bash
 docker build -t rag-assistant .
-
-# macOS / Windows (Docker Desktop)
-docker run -p 8000:8000 rag-assistant
-
-# Linux (Ollama on host)
-docker run -p 8000:8000 \
-  -e OLLAMA_HOST=http://172.17.0.1:11434 \
-  rag-assistant
+docker run -p 8000:8000 -e OLLAMA_HOST=http://host.docker.internal:11434 rag-assistant
 ```
 
 ---
@@ -134,66 +143,47 @@ docker run -p 8000:8000 \
 pytest tests/test_pipeline.py -v
 ```
 
-14 unit tests across all pipeline components. No live Ollama instance required — external calls are mocked.
+No live Ollama instance required — all external calls are mocked.
 
 ---
 
-## Retrieval Evaluation
+## MLflow
 
 ```bash
-python -m evaluation.retrieval_eval
+python -m monitoring.mlflow_logger
+mlflow ui   # http://localhost:5000
 ```
 
-Evaluates 8 questions (covering all 3 companies) against the live FAISS index.
-
-| Metric | Description |
-|--------|-------------|
-| Hit Rate | Fraction of queries where a retrieved chunk contains an expected keyword |
-| Source Accuracy | Fraction where the correct company's PDF appears in top-k results |
-| MRR | Mean Reciprocal Rank of the first matching source |
-
-Expected output format:
-```
-num_questions: 8
-k: 4
-hit_rate: <measured>
-source_accuracy: <measured>
-mrr: <measured>
-avg_chunks_returned: 4.0
-```
+Each query is logged as a run with latency, answer length, and sources as metrics.
 
 ---
 
-## MLflow Tracking
+## Project Structure
 
-```bash
-python -m monitoring.mlflow_logger   # runs one example query and logs it
-
-mlflow ui                             # open http://localhost:5000
 ```
-
-Each query is logged as a run under the `rag-knowledge-assistant` experiment with:
-- **Params**: question, num_sources, source_files
-- **Metrics**: latency_seconds, answer_length_chars, sources_returned
-- **Artifact**: full answer text file
-
----
-
-## Data Exploration
-
-```bash
-python -m exploration.explore_data
+.
+├── api/
+│   └── main.py                 # FastAPI app
+├── chains/
+│   └── qa_chain.py             # RetrievalQA chain
+├── data/
+│   ├── *.pdf                   # not tracked in git
+│   └── financial_summary.csv
+├── embeddings/
+│   └── vector_store.py         # FAISS build/load/query
+├── evaluation/
+│   └── retrieval_eval.py       # hit rate, source accuracy, MRR
+├── exploration/
+│   └── explore_data.py         # data inspection
+├── faiss_index/                # not tracked in git
+├── ingestion/
+│   ├── pdf_loader.py
+│   └── csv_loader.py
+├── monitoring/
+│   └── mlflow_logger.py
+├── tests/
+│   └── test_pipeline.py
+├── app.py                      # Streamlit UI
+├── Dockerfile
+└── requirements.txt
 ```
-
-Prints CSV contents, per-PDF page/chunk counts, FAISS index size, and chunk character distribution.
-
----
-
-## Models
-
-| Role | Model | Provider |
-|------|-------|----------|
-| Embeddings | `nomic-embed-text` | Ollama (local) |
-| Generation | `llama3` | Ollama (local) |
-
-No external API calls are made at inference time.
