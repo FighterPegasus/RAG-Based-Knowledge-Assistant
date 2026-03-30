@@ -4,7 +4,7 @@ from chains.qa_chain import build_chain, ask
 
 st.set_page_config(page_title="RAG Knowledge Assistant", layout="centered")
 st.title("RAG Knowledge Assistant")
-st.caption("Ask natural language questions across your documents")
+st.caption("Ask questions across your documents")
 
 # load chain once per session
 if "chain" not in st.session_state:
@@ -24,7 +24,7 @@ for msg in st.session_state.history:
                     st.markdown(f"- **{s['source']}** — page {s['page']}")
 
 # input
-if question := st.chat_input("Ask a question about your documents..."):
+if question := st.chat_input("Ask a question..."):
     with st.chat_message("user"):
         st.markdown(question)
     st.session_state.history.append({"role": "user", "content": question})
